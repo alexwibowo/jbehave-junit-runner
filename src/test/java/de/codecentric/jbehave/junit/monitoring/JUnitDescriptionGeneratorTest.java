@@ -31,10 +31,9 @@ import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
 import org.jbehave.core.configuration.Configuration;
 import org.jbehave.core.configuration.Keywords;
-import org.jbehave.core.model.ExamplesTable;
-import org.jbehave.core.model.GivenStories;
-import org.jbehave.core.model.Scenario;
-import org.jbehave.core.model.Story;
+import org.jbehave.core.embedder.MetaFilter;
+import org.jbehave.core.embedder.StoryControls;
+import org.jbehave.core.model.*;
 import org.jbehave.core.steps.CandidateSteps;
 import org.jbehave.core.steps.StepCandidate;
 import org.jbehave.core.steps.StepType;
@@ -42,9 +41,13 @@ import org.jbehave.core.steps.Steps;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.Description;
+import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.mockito.runners.MockitoJUnitRunner;
 
+@RunWith(MockitoJUnitRunner.class)
 public class JUnitDescriptionGeneratorTest {
 
 	private static final String DEFAULT_STORY_NAME = "Default Story Name";
@@ -61,27 +64,50 @@ public class JUnitDescriptionGeneratorTest {
 	GivenStories givenStories;
 	@Mock
 	Configuration configuration;
+    @Mock
+    MetaFilter metaFilter;
+    @Mock
+    StoryControls storyControls;
+    @Mock
+    Meta storyMeta;
+    @Mock
+    Meta storyMetaPrefixMeta;
+    @Mock
+    Meta scenarioMeta;
+    @Mock
+    Meta scenarioMetaPrefixMeta;
 
 	private JUnitDescriptionGenerator generator;
 	private Description description;
 
 	@Before
 	public void setUp() {
-		MockitoAnnotations.initMocks(this);
 		when(steps.listCandidates()).thenReturn(
 				Arrays.asList(new StepCandidate[] { stepCandidate }));
 		when(stepCandidate.matches(anyString())).thenReturn(true);
 		when(stepCandidate.matches(anyString(), anyString())).thenReturn(true);
 		when(stepCandidate.getStepsInstance()).thenReturn(new Object());
 		when(story.getName()).thenReturn(DEFAULT_STORY_NAME);
-		when(scenario.getTitle()).thenReturn(DEFAULT_SCENARIO_TITLE);
-		when(givenStories.getPaths()).thenReturn(
+        when(story.getMeta()).thenReturn(storyMeta);
+        when(storyControls.storyMetaPrefix()).thenReturn("");
+        when(storyMeta.inheritFrom(Mockito.any(Meta.class))).thenReturn(storyMeta);
+        when(story.asMeta(Mockito.anyString())).thenReturn(storyMetaPrefixMeta);
+
+        when(scenario.getTitle()).thenReturn(DEFAULT_SCENARIO_TITLE);
+        when(scenario.getMeta()).thenReturn(scenarioMeta);
+        when(storyControls.scenarioMetaPrefix()).thenReturn("");
+        when(scenarioMeta.inheritFrom(Mockito.any(Meta.class))).thenReturn(scenarioMeta);
+        when(scenario.asMeta(Mockito.anyString())).thenReturn(scenarioMetaPrefixMeta);
+
+        when(givenStories.getPaths()).thenReturn(
 				Collections.<String> emptyList());
 		when(scenario.getGivenStories()).thenReturn(givenStories);
 		when(configuration.keywords()).thenReturn(new Keywords());
+		when(configuration.storyControls()).thenReturn(storyControls);
 		generator = new JUnitDescriptionGenerator(
-				Arrays.asList(new CandidateSteps[] { steps }), configuration);
-	}
+				Arrays.asList(new CandidateSteps[] { steps }), configuration, metaFilter);
+        when(metaFilter.allow(Mockito.any(Meta.class))).thenReturn(true);
+    }
 
 	@Test
 	public void shouldCountSteps() {
@@ -149,7 +175,6 @@ public class JUnitDescriptionGeneratorTest {
 
 	@Test
 	public void shouldStripLinebreaksFromScenarioDescriptions() {
-		Scenario scenario = mock(Scenario.class);
 		addScenarioToStory(scenario);
 		when(scenario.getGivenStories()).thenReturn(givenStories);
 
@@ -165,7 +190,6 @@ public class JUnitDescriptionGeneratorTest {
 
 	@Test
 	public void shouldStripCarriageReturnsFromScenarioDescriptions() {
-		Scenario scenario = mock(Scenario.class);
 		addScenarioToStory(scenario);
 		when(scenario.getGivenStories()).thenReturn(givenStories);
 
@@ -244,7 +268,7 @@ public class JUnitDescriptionGeneratorTest {
 				Arrays.asList(new StepCandidate[] { stepCandidate,
 						composedStep1, composedStep2 }));
 		generator = new JUnitDescriptionGenerator(
-				Arrays.asList(new CandidateSteps[] { steps }), configuration);
+				Arrays.asList(new CandidateSteps[] { steps }), configuration, metaFilter);
 
 		generateScenarioDescription();
 

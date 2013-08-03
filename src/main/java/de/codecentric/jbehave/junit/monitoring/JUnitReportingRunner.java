@@ -173,7 +173,7 @@ public class JUnitReportingRunner extends Runner {
 
 	private List<Description> buildDescriptionFromStories() {
 		JUnitDescriptionGenerator descriptionGenerator = new JUnitDescriptionGenerator(
-				candidateSteps, configuration);
+				candidateSteps, configuration, configuredEmbedder.metaFilter());
 		StoryRunner storyRunner = new StoryRunner();
 		List<Description> storyDescriptions = new ArrayList<Description>();
 
