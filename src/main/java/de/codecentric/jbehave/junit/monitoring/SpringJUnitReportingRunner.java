@@ -6,12 +6,8 @@ package de.codecentric.jbehave.junit.monitoring;
  * Time: 10:46 PM
  */
 
-import org.jbehave.core.ConfigurableEmbedder;
 import org.jbehave.core.configuration.Configuration;
 import org.jbehave.core.embedder.*;
-import org.jbehave.core.io.StoryPathResolver;
-import org.jbehave.core.junit.JUnitStories;
-import org.jbehave.core.junit.JUnitStory;
 import org.jbehave.core.model.Meta;
 import org.jbehave.core.model.Scenario;
 import org.jbehave.core.model.Story;
@@ -26,12 +22,10 @@ import org.junit.runners.model.Statement;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
-public class SpringJUnitReportingRunner extends SpringJUnit4ClassRunner{
+public class SpringJUnitReportingRunner extends SpringJUnit4ClassRunner {
     private List<Description> storyDescriptions;
     private Embedder configuredEmbedder;
     private List<String> storyPaths;
@@ -39,20 +33,16 @@ public class SpringJUnitReportingRunner extends SpringJUnit4ClassRunner{
     private int numberOfTestCases;
     private Description rootDescription;
     List<CandidateSteps> candidateSteps;
-    private ConfigurableEmbedder configurableEmbedder;
+    private JBehaveTest testInstance;
 
     @SuppressWarnings("unchecked")
-    public SpringJUnitReportingRunner(Class<? extends ConfigurableEmbedder> testClass)
+    public SpringJUnitReportingRunner(Class<? extends JBehaveTest> testClass)
             throws Throwable {
         super(testClass);
-        configurableEmbedder = testClass.newInstance();
-        getTestContextManager().prepareTestInstance(configurableEmbedder);
+        testInstance = testClass.newInstance();
+        getTestContextManager().prepareTestInstance(testInstance);
 
-        if (configurableEmbedder instanceof JUnitStories) {
-            getStoryPathsFromJUnitStories(testClass);
-        } else if (configurableEmbedder instanceof JUnitStory) {
-            getStoryPathsFromJUnitStory();
-        }
+        getStoryPaths();
 
         configuration = configuredEmbedder.configuration();
 
@@ -79,20 +69,19 @@ public class SpringJUnitReportingRunner extends SpringJUnit4ClassRunner{
         JUnitScenarioReporter junitReporter = new JUnitScenarioReporter(
                 notifier, numberOfTestCases, rootDescription);
         // tell the reporter how to handle pending steps
-        junitReporter.usePendingStepStrategy(configuration
-                .pendingStepStrategy());
+        junitReporter.usePendingStepStrategy(configuration.pendingStepStrategy());
 
         addToStoryReporterFormats(junitReporter);
 
         try {
-            Statement statement= new Statement() {
+            Statement statement = new Statement() {
                 @Override
                 public void evaluate() throws Throwable {
                     configuredEmbedder.runStoriesAsPaths(storyPaths);
                 }
             };
-            statement= withBeforeClasses(statement);
-            statement= withAfterClasses(statement);
+            statement = withBeforeClasses(statement);
+            statement = withAfterClasses(statement);
             statement.evaluate();
         } catch (Throwable e) {
             throw new RuntimeException(e);
@@ -101,20 +90,10 @@ public class SpringJUnitReportingRunner extends SpringJUnit4ClassRunner{
         }
     }
 
-    public static EmbedderControls recommandedControls(Embedder embedder) {
-        return embedder.embedderControls()
-                // don't throw an exception on generating reports for failing stories
-                .doIgnoreFailureInView(true)
-                        // don't throw an exception when a story failed
-                .doIgnoreFailureInStories(true)
-                        // .doVerboseFailures(true)
-                .useThreads(1);
-    }
-
     private void createCandidateStepsWith(StepMonitor stepMonitor) {
         // reset step monitor and recreate candidate steps
         configuration.useStepMonitor(stepMonitor);
-        getCandidateSteps();
+        createCandidateSteps();
         for (CandidateSteps step : candidateSteps) {
             step.configuration().useStepMonitor(stepMonitor);
         }
@@ -126,47 +105,19 @@ public class SpringJUnitReportingRunner extends SpringJUnit4ClassRunner{
         return usedStepMonitor;
     }
 
-    private void getStoryPathsFromJUnitStory() {
-        configuredEmbedder = configurableEmbedder.configuredEmbedder();
-        StoryPathResolver resolver = configuredEmbedder.configuration()
-                .storyPathResolver();
-        storyPaths = Arrays.asList(resolver.resolve(configurableEmbedder
-                .getClass()));
-    }
-
     @SuppressWarnings("unchecked")
-    private void getStoryPathsFromJUnitStories(
-            Class<? extends ConfigurableEmbedder> testClass)
-            throws NoSuchMethodException, IllegalAccessException,
-            InvocationTargetException {
-        configuredEmbedder = configurableEmbedder.configuredEmbedder();
-        Method method = makeStoryPathsMethodPublic(testClass);
-        storyPaths = ((List<String>) method.invoke(
-                (JUnitStories) configurableEmbedder, (Object[]) null));
+    private void getStoryPaths()
+            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        configuredEmbedder = testInstance.configuredEmbedder();
+        storyPaths = testInstance.storyPaths();
     }
 
-    private Method makeStoryPathsMethodPublic(
-            Class<? extends ConfigurableEmbedder> testClass)
-            throws NoSuchMethodException {
-        Method method;
-        try {
-            method = testClass.getDeclaredMethod("storyPaths", (Class[]) null);
-        } catch (NoSuchMethodException e) {
-            method = testClass.getMethod("storyPaths", (Class[]) null);
-        }
-        method.setAccessible(true);
-        return method;
-    }
-
-    private void getCandidateSteps() {
-        // candidateSteps = configurableEmbedder.configuredEmbedder()
-        // .stepsFactory().createCandidateSteps();
-        InjectableStepsFactory stepsFactory = configurableEmbedder
-                .stepsFactory();
+    private void createCandidateSteps() {
+        InjectableStepsFactory stepsFactory = testInstance.getInjectableStepsFactory();
         if (stepsFactory != null) {
             candidateSteps = stepsFactory.createCandidateSteps();
         } else {
-            Embedder embedder = configurableEmbedder.configuredEmbedder();
+            Embedder embedder = testInstance.configuredEmbedder();
             candidateSteps = embedder.candidateSteps();
             if (candidateSteps == null || candidateSteps.isEmpty()) {
                 candidateSteps = embedder.stepsFactory().createCandidateSteps();
@@ -175,8 +126,7 @@ public class SpringJUnitReportingRunner extends SpringJUnit4ClassRunner{
     }
 
     private void initRootDescription() {
-        rootDescription = Description
-                .createSuiteDescription(configurableEmbedder.getClass());
+        rootDescription = Description.createSuiteDescription(testInstance.getClass());
         rootDescription.getChildren().addAll(storyDescriptions);
     }
 
@@ -211,8 +161,6 @@ public class SpringJUnitReportingRunner extends SpringJUnit4ClassRunner{
                 Description descr = gen.createDescriptionFrom(parseStory);
                 storyDescriptions.add(descr);
                 numberOfTestCases += parseStory.getScenarios().size();
-            }else{
-//                LOGGER.info("Skipping story [{}]", parseStory.getName());
             }
         }
     }
